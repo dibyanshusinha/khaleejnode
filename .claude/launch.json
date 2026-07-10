@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "khaleejnode",
+      "runtimeExecutable": ".venv/bin/python",
+      "runtimeArgs": ["run.py", "--no-browser", "--port", "8787"],
+      "port": 8787
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_meta": {
+    "source": "REPRESENTATIVE country-risk / embargo tiers — illustrative, NOT legal advice.",
+    "note": "Set to your organisation's compliance policy and the prevailing UAE/UN embargo posture. ISO-3166 alpha-2 keys.",
+    "levels": {
+      "embargo": "Comprehensive restrictions — treat as BLOCK pending compliance review.",
+      "high": "Enhanced due diligence — WARN.",
+      "elevated": "Screen carefully — INFO."
+    }
+  },
+  "countries": {
+    "KP": {"level": "embargo", "name": "North Korea"},
+    "IR": {"level": "embargo", "name": "Iran"},
+    "SY": {"level": "embargo", "name": "Syria"},
+    "CU": {"level": "high", "name": "Cuba"},
+    "RU": {"level": "high", "name": "Russia"},
+    "BY": {"level": "high", "name": "Belarus"},
+    "SD": {"level": "high", "name": "Sudan"},
+    "AF": {"level": "elevated", "name": "Afghanistan"},
+    "MM": {"level": "elevated", "name": "Myanmar"},
+    "VE": {"level": "elevated", "name": "Venezuela"}
+  }
+}

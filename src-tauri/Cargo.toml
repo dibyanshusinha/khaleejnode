@@ -1,0 +1,19 @@
+[package]
+name = "khaleejnode-app"
+version = "1.0.0"
+edition = "2021"
+description = "KhaleejNode — Tauri desktop shell wrapping the Rust Shield + Python Brain."
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+khaleej_core = { path = "../core-rs" }
+
+[features]
+# Tauri's default runtime feature set.
+custom-protocol = ["tauri/custom-protocol"]

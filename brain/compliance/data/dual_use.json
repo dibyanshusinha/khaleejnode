@@ -1,0 +1,22 @@
+{
+  "_meta": {
+    "source": "REPRESENTATIVE dual-use / controlled-goods rules — NOT the full Wassenaar / EU dual-use / UAE control list.",
+    "note": "Maps HS-code prefixes and description keywords to control categories. Extend with the licensed control lists in the same shape."
+  },
+  "by_hs_prefix": {
+    "8507.60": {"category": "Energy storage", "control": "Lithium cells/batteries — IATA/ICAO dangerous-goods handling; permit for bulk export.", "severity": "WARN"},
+    "8517": {"category": "Telecommunications", "control": "Encryption-capable comms equipment may be controlled (Wassenaar Cat 5).", "severity": "INFO"},
+    "8471": {"category": "Computing", "control": "High-performance computing may be export-controlled.", "severity": "INFO"},
+    "2710": {"category": "Mineral fuels", "control": "Hydrocarbons — hazardous goods; jurisdiction restrictions may apply.", "severity": "INFO"},
+    "9018": {"category": "Medical", "control": "Certain diagnostic/biological equipment may be dual-use (Cat 2).", "severity": "INFO"}
+  },
+  "by_keyword": {
+    "centrifuge": {"category": "Proliferation-sensitive", "control": "Centrifuges are strongly controlled (nuclear dual-use).", "severity": "BLOCK"},
+    "maraging steel": {"category": "Proliferation-sensitive", "control": "Maraging steel is export-controlled.", "severity": "BLOCK"},
+    "drone": {"category": "UAV", "control": "UAVs / UAV components may be military/dual-use controlled.", "severity": "WARN"},
+    "night vision": {"category": "Optics", "control": "Night-vision devices are export-controlled.", "severity": "WARN"},
+    "encryption": {"category": "Cryptography", "control": "Encryption items may require an export licence (Wassenaar Cat 5p2).", "severity": "INFO"},
+    "aerosol": {"category": "Hazardous", "control": "Aerosols are dangerous goods — special handling.", "severity": "INFO"},
+    "flammable": {"category": "Hazardous", "control": "Flammable goods — dangerous-goods declaration required.", "severity": "WARN"}
+  }
+}

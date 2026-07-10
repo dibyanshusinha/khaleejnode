@@ -1,0 +1,27 @@
+# Runtime state — machine-bound, never commit
+state/
+
+# Vendor PRIVATE signing key — must never be distributed/committed
+tools/vendor_private.pem
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Rust / Cargo
+target/
+core-rs/target/
+src-tauri/target/
+
+# Tauri generated + bundled artifacts
+src-tauri/gen/
+src-tauri/binaries/
+build/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store

@@ -1,0 +1,28 @@
+[package]
+name = "khaleej_core"
+version = "1.0.0"
+edition = "2021"
+description = "KhaleejNode secure core (The Shield) — native Rust port for the Tauri backend."
+
+[lib]
+name = "khaleej_core"
+path = "src/lib.rs"
+
+[dependencies]
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ed25519-dalek = { version = "2", features = ["pem", "pkcs8"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+machine-uid = "0.5"
+mac_address = "1.1"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rand = "0.8"
+keyring = "2"
+thiserror = "1"
+
+[dev-dependencies]
+tempfile = "3"

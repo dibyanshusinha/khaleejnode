@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KhaleejNode — Enterprise TradeTech Node</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Title bar mimics a native desktop chrome -->
+  <header class="titlebar">
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <div class="brand-name">KhaleejNode</div>
+        <div class="brand-sub" id="edition">Enterprise TradeTech Node</div>
+      </div>
+    </div>
+    <div class="titlebar-right">
+      <span class="pill pill-offline">● OFFLINE</span>
+      <span class="pill" id="node-pill" title="Hardware-bound node id">NODE —</span>
+    </div>
+  </header>
+
+  <!-- Persistent safety disclaimer -->
+  <div class="global-disclaimer">
+    ⚠ Assistive pre-check — not customs or legal advice. Screening uses
+    <strong>sample</strong> reference data until official tariff &amp; sanctions
+    lists are loaded. <strong>Every result requires human review.</strong>
+  </div>
+
+  <!-- LICENSE LOCKED VIEW -->
+  <section id="locked-view" class="view hidden">
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <h1>Application Locked</h1>
+      <p id="lock-reason" class="muted">This node is not activated.</p>
+      <div class="hw-block">
+        <div class="hw-label">This machine's Hardware ID</div>
+        <code id="lock-hwid">—</code>
+      </div>
+      <p class="muted small">
+        Send the Hardware ID above to your KhaleejNode vendor to receive a
+        node-locked <code>license.key</code>. Place it in <code>state/</code> and relaunch.
+      </p>
+    </div>
+  </section>
+
+  <!-- MAIN DASHBOARD VIEW -->
+  <section id="dashboard-view" class="view hidden">
+    <div class="grid">
+      <!-- Left column: credits + drop zone -->
+      <div class="col">
+        <div class="card token-card">
+          <div class="token-head">
+            <span>Remaining Prepaid Document Checks</span>
+          </div>
+          <div class="token-count" id="token-count">—</div>
+          <div class="token-bar"><div class="token-bar-fill" id="token-bar-fill"></div></div>
+
+          <div class="refill">
+            <label for="refill-input">Add Prepaid Credits</label>
+            <textarea id="refill-input" rows="3"
+              placeholder="Paste license token string here…"></textarea>
+            <button id="refill-btn" class="btn btn-primary">Redeem Token</button>
+            <div id="refill-msg" class="refill-msg"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Shipping Document</div>
+          <div id="dropzone" class="dropzone">
+            <div class="dz-inner">
+              <div class="dz-icon">⤓</div>
+              <div class="dz-text">Drag &amp; drop a shipping PDF here</div>
+              <div class="dz-sub">or click to browse — 1 credit per check</div>
+              <input id="file-input" type="file" accept="application/pdf,.pdf" hidden />
+            </div>
+          </div>
+          <div id="file-name" class="file-name"></div>
+          <button id="process-btn" class="btn btn-primary btn-block" disabled>
+            Run Customs Check
+          </button>
+        </div>
+      </div>
+
+      <!-- Right column: output log -->
+      <div class="col col-wide">
+        <div class="card log-card">
+          <div class="card-title row-between">
+            <span>Output Log — Extraction &amp; Adversarial Validation</span>
+            <button id="clear-log" class="btn btn-ghost btn-small">Clear</button>
+          </div>
+          <div id="log" class="log">
+            <div class="log-empty">
+              <div class="log-empty-icon">🗂️</div>
+              <div class="log-empty-title">No checks run yet</div>
+              <div class="log-empty-sub">
+                Drop a shipping PDF into the panel on the left to run your first
+                customs validation. Extraction results and adversarial flags appear here.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="statusbar">
+      <div class="status-item" id="st-license">
+        <span class="dot"></span> Node-locked license
+      </div>
+      <div class="status-item" id="st-vault">
+        <span class="dot"></span> Vault sealed &middot; HMAC
+      </div>
+      <div class="status-item">
+        <span class="dot on"></span> 100% offline
+      </div>
+      <div class="status-spacer"></div>
+      <div class="status-meta" id="st-region">United Arab Emirates (GCC)</div>
+    </footer>
+  </section>
+
+  <div id="hwid-full" class="hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
