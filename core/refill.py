@@ -162,13 +162,15 @@ def redeem_token(token: str, hardware_id: str) -> RefillResult:
     if datetime.now(timezone.utc) > expires_dt:
         raise RefillError("This credit token has expired.")
 
-    # 4. Replay protection (single-use).
-    _register_nonce(nonce)
-
-    # 5. Credit the tamper-evident vault.
-    state = vault.credit(
-        hardware_id, credits, detail=f"refill:{package}:{nonce[:8]}"
-    )
+    # 4. Replay protection and credit vault (combined inside a single transaction).
+    try:
+        state = vault.credit(
+            hardware_id, credits, detail=f"refill:{package}:{nonce[:8]}", nonce_to_register=nonce
+        )
+    except vault.VaultError as exc:
+        if "already been redeemed" in str(exc):
+            raise RefillError("This credit token has already been redeemed.") from exc
+        raise RefillError(str(exc)) from exc
 
     return RefillResult(
         credits_added=credits,

@@ -106,14 +106,24 @@ pub fn redeem_token(
         return Err(RefillError::Expired);
     }
 
-    // 4. Single-use replay protection.
-    vault::register_nonce(db_path, &payload.nonce).map_err(|_| RefillError::AlreadyRedeemed)?;
-
-    // 5. Credit the tamper-evident vault.
+    // 4. Single-use replay protection and credit vault combined in a single transaction.
     let short = &payload.nonce[..payload.nonce.len().min(8)];
     let detail = format!("refill:{}:{}", payload.package, short);
-    let state = vault::credit(db_path, salt, hardware_id, payload.credits, &detail)
-        .map_err(|e| RefillError::Other(e.to_string()))?;
+    let state = vault::credit(
+        db_path,
+        salt,
+        hardware_id,
+        payload.credits,
+        &detail,
+        Some(&payload.nonce),
+    )
+    .map_err(|e| {
+        if e.to_string().contains("already been redeemed") {
+            RefillError::AlreadyRedeemed
+        } else {
+            RefillError::Other(e.to_string())
+        }
+    })?;
 
     Ok(RefillResult {
         credits_added: payload.credits,

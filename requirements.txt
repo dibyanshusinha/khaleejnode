@@ -6,6 +6,7 @@ pydantic>=2.0        # typed UAE customs manifest contract (The Brain)
 cryptography>=41.0   # Ed25519 asymmetric signing for offline credit tokens
 pymupdf>=1.24        # render shipping PDFs to page images for vision extraction
 pyspellchecker>=0.8  # offline spell check for commodity descriptions (typo flags)
+keyring>=24.0.0      # secure local OS credential storage for balance integrity
 
 # Benchmark harness only (benchmark/) — not needed by the app/sidecar at runtime:
 Pillow>=10.0         # image degradation for the accuracy stress-test

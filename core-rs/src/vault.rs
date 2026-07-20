@@ -12,6 +12,14 @@
 //! the ledger logic is storage-agnostic, exactly like the Python `_connect()` seam.
 
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
+use std::collections::HashMap;
+
+static MOCK_KEYCHAIN: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+
+fn get_mock_keychain() -> &'static Mutex<HashMap<String, String>> {
+    MOCK_KEYCHAIN.get_or_init(|| Mutex::new(HashMap::new()))
+}
 
 use hmac::{Hmac, Mac};
 use rand::RngCore;
@@ -57,8 +65,53 @@ fn open_db(db_path: &Path) -> Result<Connection, VaultError> {
     Ok(conn)
 }
 
-fn sign_row(balance: i64, hardware_id: &str, nonce: &str, salt: &[u8]) -> String {
-    let message = format!("{}||{}||{}", balance, hardware_id, nonce);
+fn sync_keychain_balance(hardware_id: &str, balance: i64) {
+    if std::env::var("KHALEEJNODE_TESTING_MOCK_KEYCHAIN").is_ok() {
+        let mut mock = get_mock_keychain().lock().unwrap();
+        mock.insert(hardware_id.to_string(), balance.to_string());
+        return;
+    }
+    if std::env::var("KHALEEJNODE_TESTING").is_ok() {
+        return;
+    }
+    if let Ok(entry) = keyring::Entry::new("com.khaleejnode.app", &format!("vault_balance_{}", hardware_id)) {
+        let _ = entry.set_password(&balance.to_string());
+    }
+}
+
+fn get_keychain_balance(hardware_id: &str) -> Option<i64> {
+    if std::env::var("KHALEEJNODE_TESTING_MOCK_KEYCHAIN").is_ok() {
+        let mock = get_mock_keychain().lock().unwrap();
+        return mock.get(hardware_id).and_then(|v| v.parse::<i64>().ok());
+    }
+    if std::env::var("KHALEEJNODE_TESTING").is_ok() {
+        return None;
+    }
+    if let Ok(entry) = keyring::Entry::new("com.khaleejnode.app", &format!("vault_balance_{}", hardware_id)) {
+        if let Ok(password) = entry.get_password() {
+            if let Ok(bal) = password.parse::<i64>() {
+                return Some(bal);
+            }
+        }
+    }
+    None
+}
+
+fn compute_tokens_signature(conn: &Connection, salt: &[u8]) -> Result<String, VaultError> {
+    let mut stmt = conn.prepare("SELECT nonce FROM redeemed_tokens ORDER BY nonce ASC")?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    let mut nonces = Vec::new();
+    for r in rows {
+        nonces.push(r?);
+    }
+    let message = nonces.join("||");
+    let mut mac = HmacSha256::new_from_slice(salt).expect("hmac key");
+    mac.update(message.as_bytes());
+    Ok(hex::encode(mac.finalize().into_bytes()))
+}
+
+fn sign_row(balance: i64, hardware_id: &str, nonce: &str, tokens_signature: &str, salt: &[u8]) -> String {
+    let message = format!("{}||{}||{}||{}", balance, hardware_id, nonce, tokens_signature);
     let mut mac = HmacSha256::new_from_slice(salt).expect("hmac key");
     mac.update(message.as_bytes());
     hex::encode(mac.finalize().into_bytes())
@@ -89,12 +142,13 @@ fn now_iso() -> String {
 fn ensure_schema(conn: &Connection) -> Result<(), VaultError> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS ledger (
-             id          INTEGER PRIMARY KEY CHECK (id = 1),
-             balance     INTEGER NOT NULL,
-             hardware_id TEXT    NOT NULL,
-             nonce       TEXT    NOT NULL,
-             updated_at  TEXT    NOT NULL,
-             signature   TEXT    NOT NULL
+             id               INTEGER PRIMARY KEY CHECK (id = 1),
+             balance          INTEGER NOT NULL,
+             hardware_id      TEXT    NOT NULL,
+             nonce            TEXT    NOT NULL,
+             updated_at       TEXT    NOT NULL,
+             tokens_signature TEXT    NOT NULL DEFAULT '',
+             signature        TEXT    NOT NULL
          );
          CREATE TABLE IF NOT EXISTS audit_log (
              id      INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +163,25 @@ fn ensure_schema(conn: &Connection) -> Result<(), VaultError> {
              redeemed_at TEXT NOT NULL
          );",
     )?;
+
+    // Check if tokens_signature column exists, if not, alter table
+    let has_col: bool = {
+        let mut stmt = conn.prepare("PRAGMA table_info(ledger)")?;
+        let mut rows = stmt.query([])?;
+        let mut found = false;
+        while let Some(row) = rows.next()? {
+            let col_name: String = row.get(1)?;
+            if col_name == "tokens_signature" {
+                found = true;
+                break;
+            }
+        }
+        found
+    };
+    if !has_col {
+        conn.execute("ALTER TABLE ledger ADD COLUMN tokens_signature TEXT NOT NULL DEFAULT ''", [])?;
+    }
+
     Ok(())
 }
 
@@ -129,17 +202,19 @@ pub fn initialize(
 
     if !exists {
         let nonce = fresh_nonce();
-        let sig = sign_row(opening_balance, hardware_id, &nonce, salt);
+        let tokens_sig = compute_tokens_signature(&conn, salt)?;
+        let sig = sign_row(opening_balance, hardware_id, &nonce, &tokens_sig, salt);
         let now = now_iso();
         conn.execute(
-            "INSERT INTO ledger (id, balance, hardware_id, nonce, updated_at, signature)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![opening_balance, hardware_id, nonce, now, sig],
+            "INSERT INTO ledger (id, balance, hardware_id, nonce, updated_at, tokens_signature, signature)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![opening_balance, hardware_id, nonce, now, tokens_sig, sig],
         )?;
         conn.execute(
             "INSERT INTO audit_log (event, delta, balance, detail, at) VALUES (?1,?2,?3,?4,?5)",
             rusqlite::params!["INIT", opening_balance, opening_balance, "vault initialized", now],
         )?;
+        sync_keychain_balance(hardware_id, opening_balance);
     }
     read_state(db_path, salt, hardware_id)
 }
@@ -155,8 +230,10 @@ fn read_state_conn(
     salt: &[u8],
     hardware_id: &str,
 ) -> Result<VaultState, VaultError> {
+    ensure_schema(conn)?;
+
     let row = conn.query_row(
-        "SELECT balance, hardware_id, nonce, updated_at, signature FROM ledger WHERE id = 1",
+        "SELECT balance, hardware_id, nonce, updated_at, tokens_signature, signature FROM ledger WHERE id = 1",
         [],
         |r| {
             Ok((
@@ -165,23 +242,38 @@ fn read_state_conn(
                 r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?,
                 r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
             ))
         },
     );
 
-    let (balance, stored_hw, nonce, updated_at, stored_sig) = match row {
+    let (balance, stored_hw, nonce, updated_at, tokens_signature, stored_sig) = match row {
         Ok(v) => v,
         Err(rusqlite::Error::QueryReturnedNoRows) => return Err(VaultError::NotInitialized),
         Err(rusqlite::Error::SqliteFailure(_, _)) => return Err(VaultError::NotInitialized),
         Err(e) => return Err(VaultError::Other(e.to_string())),
     };
 
-    let expected = sign_row(balance, &stored_hw, &nonce, salt);
+    // 1. Tokens integrity
+    let expected_tokens_sig = compute_tokens_signature(conn, salt)?;
+    if !ct_eq(&expected_tokens_sig, &tokens_signature) {
+        return Err(VaultError::Tampered);
+    }
+
+    // 2. Integrity: does the stored signature match a fresh HMAC?
+    let expected = sign_row(balance, &stored_hw, &nonce, &tokens_signature, salt);
     if !ct_eq(&expected, &stored_sig) {
         return Err(VaultError::Tampered);
     }
     if !ct_eq(&stored_hw, hardware_id) {
         return Err(VaultError::ForeignMachine);
+    }
+
+    // 3. Rollback protection
+    if let Some(keychain_bal) = get_keychain_balance(hardware_id) {
+        if keychain_bal != balance {
+            return Err(VaultError::Tampered);
+        }
     }
 
     Ok(VaultState {
@@ -201,16 +293,18 @@ fn write_balance(
     detail: &str,
 ) -> Result<VaultState, VaultError> {
     let nonce = fresh_nonce();
-    let sig = sign_row(new_balance, hardware_id, &nonce, salt);
+    let tokens_sig = compute_tokens_signature(conn, salt)?;
+    let sig = sign_row(new_balance, hardware_id, &nonce, &tokens_sig, salt);
     let now = now_iso();
     conn.execute(
-        "UPDATE ledger SET balance = ?1, hardware_id = ?2, nonce = ?3, updated_at = ?4, signature = ?5 WHERE id = 1",
-        rusqlite::params![new_balance, hardware_id, nonce, now, sig],
+        "UPDATE ledger SET balance = ?1, hardware_id = ?2, nonce = ?3, updated_at = ?4, tokens_signature = ?5, signature = ?6 WHERE id = 1",
+        rusqlite::params![new_balance, hardware_id, nonce, now, tokens_sig, sig],
     )?;
     conn.execute(
         "INSERT INTO audit_log (event, delta, balance, detail, at) VALUES (?1,?2,?3,?4,?5)",
         rusqlite::params![event, delta, new_balance, detail, now],
     )?;
+    sync_keychain_balance(hardware_id, new_balance);
     Ok(VaultState {
         balance: new_balance,
         hardware_id: hardware_id.to_string(),
@@ -229,31 +323,54 @@ pub fn deduct(
     if amount <= 0 {
         return Err(VaultError::Other("Deduction amount must be positive.".into()));
     }
-    let conn = open_db(db_path)?;
-    let state = read_state_conn(&conn, salt, hardware_id)?;
+    let mut conn = open_db(db_path)?;
+    let tx = conn.transaction()?;
+
+    let state = read_state_conn(&tx, salt, hardware_id)?;
     if state.balance < amount {
         return Err(VaultError::Insufficient {
             have: state.balance,
             need: amount,
         });
     }
-    write_balance(&conn, state.balance - amount, hardware_id, salt, "DEDUCT", -amount, detail)
+
+    let new_state = write_balance(&tx, state.balance - amount, hardware_id, salt, "DEDUCT", -amount, detail)?;
+    tx.commit()?;
+    Ok(new_state)
 }
 
-/// Add `amount` credits after verifying integrity.
+/// Add `amount` credits after verifying integrity, optionally registering a refill token nonce in the same transaction.
 pub fn credit(
     db_path: &Path,
     salt: &[u8],
     hardware_id: &str,
     amount: i64,
     detail: &str,
+    nonce_to_register: Option<&str>,
 ) -> Result<VaultState, VaultError> {
     if amount <= 0 {
         return Err(VaultError::Other("Credit amount must be positive.".into()));
     }
-    let conn = open_db(db_path)?;
-    let state = read_state_conn(&conn, salt, hardware_id)?;
-    write_balance(&conn, state.balance + amount, hardware_id, salt, "CREDIT", amount, detail)
+    let mut conn = open_db(db_path)?;
+    let tx = conn.transaction()?;
+
+    let state = read_state_conn(&tx, salt, hardware_id)?;
+
+    if let Some(nonce) = nonce_to_register {
+        let affected = tx.execute(
+            "INSERT OR IGNORE INTO redeemed_tokens (nonce, redeemed_at) VALUES (?1, ?2)",
+            rusqlite::params![nonce, now_iso()],
+        )?;
+        if affected == 0 {
+            return Err(VaultError::Other(
+                "This credit token has already been redeemed.".into(),
+            ));
+        }
+    }
+
+    let new_state = write_balance(&tx, state.balance + amount, hardware_id, salt, "CREDIT", amount, detail)?;
+    tx.commit()?;
+    Ok(new_state)
 }
 
 /// Record a redeemed token nonce (single-use). Returns Err if already present.
